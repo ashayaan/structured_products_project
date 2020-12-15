@@ -2,7 +2,7 @@
 # @Author: shayaan
 # @Date:   2020-12-05 22:26:28
 # @Last Modified by:   shayaan
-# @Last Modified time: 2020-12-15 17:40:42
+# @Last Modified time: 2020-12-15 18:38:26
 
 import pandas as pd
 import numpy as np
@@ -41,7 +41,7 @@ class Pricing(object):
 		self.eurusd['Return'] = (self.eurusd['Close'] - self.eurusd['Close'].shift(1)) / self.eurusd['Close'].shift(1)
 		self.eurusd.dropna(inplace=True)
 		self.libor_rate.dropna(inplace=True)
-		self.libor_rate['USD3MTD156N'] /= 100
+		self.libor_rate['USD3MTD156N'] /= 100 #as interest rates are quotes in percentage
 
 	def estimateParameters(self) -> None:
 		self.stoxx_std = np.sqrt(np.var(self.stoxx['Return'])*252)
@@ -60,16 +60,17 @@ class Pricing(object):
 		dem = 0
 		r_mean = np.mean(self.libor_rate['USD3MTD156N'])
 		print("Mean:{}".format(r_mean))
+
 		for i in range(1,len(self.libor_rate)):
 			num += (self.libor_rate.iloc[i]['USD3MTD156N'] - r_mean) * (self.libor_rate.iloc[i-1]['USD3MTD156N'] - r_mean)
 			dem += (self.libor_rate.iloc[i]['USD3MTD156N'] - r_mean)**2
 
-		self.a = (-1*num)/dem
+		self.a = 1 - (num)/dem
 		self.b = r_mean + self.a * r_mean
 
 		s = 0
 		for i in range(1,len(self.libor_rate)):
-			s += (self.libor_rate.iloc[i]['USD3MTD156N'] - self.b + self.a*self.libor_rate.iloc[i-1]['USD3MTD156N'])**2
+			s += (self.libor_rate.iloc[i]['USD3MTD156N'] - self.b + (1-self.a)*self.libor_rate.iloc[i-1]['USD3MTD156N'])**2
 		
 		self.sigma = np.sqrt(s/(len(self.libor_rate)-2))
 
@@ -82,10 +83,12 @@ class Pricing(object):
 
 		#number of simulations for libor
 		for i in range(M):
-			r = 0
+			r = self.libor_rate.iloc[-1]['USD3MTD156N']
 			for j in range((T - delta_t )):
 				weiner_process = np.random.normal(0,1)
-				r = self.b - (self.a * r) + self.sigma * weiner_process
+				# print("B : {} second : {} weiner : {} ".format(self.b,(1-self.a) * r,self.sigma * weiner_process ) ) 
+				r = self.b + (1-self.a) * r + self.sigma * weiner_process
+			print(r)
 			rates[i] = r
 		return rates
 
@@ -108,7 +111,7 @@ class Pricing(object):
 		quanto = stoxx_0 * eurusd_0 * np.exp((self.stoxx_mean * self.eurusd_mean - (self.stoxx_std**2 + self.eurusd_std**2)/2)*T + self.stoxx_std*W_1 + self.eurusd_std*W_2 )
 		
 		libor = self.simulateLIBOR(T,delta_t,M)
-
+		print(libor)
 		price = (quanto/quanto_0 -K ) * (libor/forward_rate - K_)
 		price = np.where( price > 0 , price,0 )
 
@@ -116,8 +119,8 @@ class Pricing(object):
 
 
 if __name__ == '__main__':
-	start_date = "2020-01-01"
-	end_date = "2020-12-12"
+	start_date = "2019-01-01"
+	end_date = "2019-12-12"
 	test = Pricing(start_date,end_date)
 	test.estimateParameters()
 	print("Price of the option is:{} ".format(test.estimatePrice(1,100,101,100,1.2,100.0,10.1,10))) 
