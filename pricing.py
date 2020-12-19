@@ -2,7 +2,7 @@
 # @Author: shayaan
 # @Date:   2020-12-05 22:26:28
 # @Last Modified by:   shayaan
-# @Last Modified time: 2020-12-18 21:30:07
+# @Last Modified time: 2020-12-18 22:31:26
 
 import pandas as pd
 import numpy as np
@@ -80,14 +80,12 @@ class Pricing(object):
 		delta_t = delta_t * 30
 		rates = np.zeros(M)
 
-		#number of simulations for libor
-		for i in range(M):
-			r = self.libor_rate.iloc[-1]['USD3MTD156N'] 
-			for j in range((T - delta_t )):
-				weiner_process = np.random.normal(0,1)
-				r = self.b + (1-self.a) * r + self.sigma * weiner_process
-			rates[i] = r
-		return rates
+		r = self.libor_rate.iloc[-1]['USD3MTD156N'] 
+		for j in range((T - delta_t )):
+			weiner_process = np.random.normal(0,1)
+			r = self.b + (1-self.a) * r + self.sigma * weiner_process
+
+		return max(r,0)
 
 	def estimatePrice(self, T:int, K:float , K_:float , M:int,forward_rate:float, delta_t=3)->float:
 		'''
@@ -95,8 +93,8 @@ class Pricing(object):
 		T : number of years as int
 		K : strike price float
 		K_ : strike price float
-		stoxx_0 : The price of stoxx at time of issuance float
 		stoxx_0 : The price of eurusd at time of issuance float
+		M : time steps of simulation
 		forward_rate : forward rate float
 		quanto_0 : The starting price of qunato float
 		delta_t : look back time in months, by default 3 
@@ -114,12 +112,12 @@ class Pricing(object):
 		W_2 = np.random.normal(0,T,M)
 		quanto = stoxx_0 * eurusd_0 * np.exp((self.stoxx_mean * self.eurusd_mean - (self.stoxx_std**2 + self.eurusd_std**2)/2)*T + self.stoxx_std*W_1 + self.eurusd_std*W_2 )
 		libor = self.simulateLIBOR(T,delta_t,M)
-		libor = np.where(libor>0,libor,0)
+		print("Libor:{}".format(libor))
 
-		price = (quanto/quanto_0 -K ) * (libor/forward_rate - K_)
-		price = np.where( price > 0 , price,0 )
+		price = max((quanto[-1]/quanto_0 -K ) * (libor/forward_rate - K_),0)
 
-		return np.mean(price) /(1 + 0.00335)
+		print("Price:{}".format(price /(1 + 0.00335)))
+		return price /(1 + 0.00335)
 
 
 if __name__ == '__main__':
@@ -127,4 +125,11 @@ if __name__ == '__main__':
 	end_date =  datetime.datetime.now().strftime('%Y-%m-%d')
 	test = Pricing(start_date,end_date)
 	test.estimateParameters()
-	print("Price of the option is:{} ".format(test.estimatePrice(1, 0.01, 0.012, 100, 0.3)) ) 
+	price = []
+	nSims = 100
+	prices = np.zeros(nSims)
+	
+	for i in range(nSims):
+		prices[i] = test.estimatePrice(1, 1, 1, 10000, 0.03)
+
+	print("Price of qunto {}".format(np.mean(prices)))
