@@ -2,7 +2,7 @@
 # @Author: shayaan
 # @Date:   2020-12-05 22:26:28
 # @Last Modified by:   shayaan
-# @Last Modified time: 2020-12-18 22:31:26
+# @Last Modified time: 2020-12-20 09:45:18
 
 import pandas as pd
 import numpy as np
@@ -10,6 +10,7 @@ from pandas_datareader import data as pdr
 from scipy import stats
 import numpy as np
 import datetime 
+import matplotlib.pyplot as plt
 np.random.seed(12)
 
 class Pricing(object):
@@ -25,6 +26,8 @@ class Pricing(object):
 		self.stoxx = pdr.DataReader('^STOXX50E',start=self.start_date,end=self.end_date,data_source='yahoo').round(4)
 		self.eurusd = pdr.DataReader('EURUSD=X',start=self.start_date,end=self.end_date,data_source='yahoo')
 		self.libor_rate = pdr.DataReader('USD3MTD156N','fred',start=self.start_date,end=self.end_date)	
+		self.risk_free_rate = pdr.DataReader('DTB1YR','fred',start=self.start_date,end=self.end_date)['DTB1YR'][-1]
+		self.risk_free_rate /= 100
 		self.findReturns()
 
 	def findReturns(self) -> None:
@@ -52,7 +55,7 @@ class Pricing(object):
 		er_date = set(self.eurusd.index)
 		common_date = st_date.intersection(er_date)
 		self.rho = stats.pearsonr(self.stoxx[self.stoxx.index.isin(common_date)]['Return'] , self.eurusd[ self.eurusd.index.isin(common_date)]['Return'])[0]
-		
+		print("Correlation:{}".format(self.rho))
 
 		#Vasicek model estimation
 		num = 0
@@ -87,7 +90,7 @@ class Pricing(object):
 
 		return max(r,0)
 
-	def estimatePrice(self, T:int, K:float , K_:float , M:int,forward_rate:float, delta_t=3)->float:
+	def estimatePrice(self, T:int, K:float , K_:float , M:int, forward_rate:float, delta_t=3)->float:
 		'''
 		Input
 		T : number of years as int
@@ -100,24 +103,17 @@ class Pricing(object):
 		delta_t : look back time in months, by default 3 
 		'''
 
-		#Simulation Quanto
-
 		stoxx_0 = self.stoxx.iloc[-1]['Close']
 		eurusd_0 = self.eurusd.iloc[-1]['Close']
 		quanto_0 = stoxx_0 * eurusd_0
-
-		print("Stoxx : {} eurusd:{}".format(stoxx_0, eurusd_0))
 
 		W_1 = np.random.normal(0,T,M)
 		W_2 = np.random.normal(0,T,M)
 		quanto = stoxx_0 * eurusd_0 * np.exp((self.stoxx_mean * self.eurusd_mean - (self.stoxx_std**2 + self.eurusd_std**2)/2)*T + self.stoxx_std*W_1 + self.eurusd_std*W_2 )
 		libor = self.simulateLIBOR(T,delta_t,M)
-		print("Libor:{}".format(libor))
-
+		plt.plot(range(1,M+1),quanto)
 		price = max((quanto[-1]/quanto_0 -K ) * (libor/forward_rate - K_),0)
-
-		print("Price:{}".format(price /(1 + 0.00335)))
-		return price /(1 + 0.00335)
+		return price /(1 + self.risk_free_rate)
 
 
 if __name__ == '__main__':
@@ -126,10 +122,13 @@ if __name__ == '__main__':
 	test = Pricing(start_date,end_date)
 	test.estimateParameters()
 	price = []
-	nSims = 100
+	nSims = 10
 	prices = np.zeros(nSims)
-	
+	# 
 	for i in range(nSims):
-		prices[i] = test.estimatePrice(1, 1, 1, 10000, 0.03)
-
+		prices[i] = test.estimatePrice(1, 0.01, 0.01, 100, 0.0022)
+	plt.xlabel('Time step')
+	plt.ylabel('Qunato porcess')
+	plt.title('Qunato Simulation')
+	plt.savefig('Simulation')
 	print("Price of qunto {}".format(np.mean(prices)))
