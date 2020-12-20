@@ -2,7 +2,7 @@
 # @Author: shayaan
 # @Date:   2020-12-05 22:26:28
 # @Last Modified by:   shayaan
-# @Last Modified time: 2020-12-20 09:45:18
+# @Last Modified time: 2020-12-20 18:10:58
 
 import pandas as pd
 import numpy as np
@@ -46,6 +46,11 @@ class Pricing(object):
 		self.libor_rate['USD3MTD156N'] /= 100 #as interest rates are quotes in percentage
 
 	def estimateParameters(self) -> None:
+		'''
+		Function to estimate the parameters for the
+		stochastic processes and Vasicek Model
+		Input : Class object
+		'''
 		self.stoxx_std = np.sqrt(np.var(self.stoxx['Return'])*252)
 		self.stoxx_mean = (np.mean(self.stoxx['Return'])*252 + (self.stoxx_std**2)/2)
 		self.eurusd_std = np.sqrt(np.var(self.eurusd['Return'])*252)
@@ -55,7 +60,6 @@ class Pricing(object):
 		er_date = set(self.eurusd.index)
 		common_date = st_date.intersection(er_date)
 		self.rho = stats.pearsonr(self.stoxx[self.stoxx.index.isin(common_date)]['Return'] , self.eurusd[ self.eurusd.index.isin(common_date)]['Return'])[0]
-		print("Correlation:{}".format(self.rho))
 
 		#Vasicek model estimation
 		num = 0
@@ -76,7 +80,6 @@ class Pricing(object):
 		
 		self.sigma = np.sqrt(s/(len(self.libor_rate)-2))
 
-		print(self.a, self.b, self.sigma)
 
 	def simulateLIBOR(self,T,delta_t,M):
 		T = 365 * T
